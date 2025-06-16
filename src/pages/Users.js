@@ -11,17 +11,7 @@ const Users = () => {
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(false);
   const [searchText, setSearchText] = useState('');
-  const [lastWeights, setLastWeights] = useState({});
-
-  // Тестовые данные для стартового веса и дней подписки
-  const mockStartWeights = {
-    1: 80.5,
-    2: 75.2,
-    3: 65.8,
-    4: 98.3,
-    5: 70.1
-  };
-
+  // Данные для дней подписки
   const mockSubscriptionDays = {
     1: 45,
     2: 12,
@@ -36,17 +26,6 @@ const Users = () => {
       const response = await api.getUsers();
       if (response.data) {
         setUsers(response.data);
-        // Получаем последний вес для каждого пользователя
-        const weights = {};
-        for (const user of response.data) {
-          try {
-            const weightResp = await api.getLastWeight(user.id, new Date().toISOString());
-            weights[user.id] = weightResp.data?.weight;
-          } catch {
-            weights[user.id] = null;
-          }
-        }
-        setLastWeights(weights);
       }
     } catch (error) {
       if (error.response) {
@@ -105,13 +84,13 @@ const Users = () => {
                 }}
                 onClick={() => navigate(`/users/${user.id}/meal-plans`)}
               >
-                <div style={{ 
-                  display: 'flex', 
-                  alignItems: 'center', 
+                <div style={{
+                  display: 'flex',
+                  alignItems: 'center',
                   width: '100%',
                   gap: '16px'
                 }}>
-                  <div style={{ 
+                  <div style={{
                     width: '40px',
                     height: '40px',
                     backgroundColor: '#f5f5f5',
@@ -122,16 +101,16 @@ const Users = () => {
                   }}>
                     <UserOutlined style={{ fontSize: '20px', color: '#1890ff' }} />
                   </div>
-                  
+
                   <div style={{ flex: '1 1 auto' }}>
-                    <div style={{ 
+                    <div style={{
                       display: 'flex',
                       alignItems: 'center',
                       gap: '24px',
                       width: '100%'
                     }}>
-                      <span style={{ 
-                        fontSize: '16px', 
+                      <span style={{
+                        fontSize: '16px',
                         fontWeight: '500',
                         display: 'flex',
                         alignItems: 'center',
@@ -146,8 +125,8 @@ const Users = () => {
 
                       <Space size="middle">
                         <Tooltip title="Стартовый вес">
-                          <Tag color="purple" style={{ 
-                            display: 'flex', 
+                          <Tag color="purple" style={{
+                            display: 'flex',
                             alignItems: 'center',
                             gap: '4px',
                             padding: '4px 8px',
@@ -155,14 +134,14 @@ const Users = () => {
                             whiteSpace: 'nowrap'
                           }}>
                             <HistoryOutlined />
-                            {mockStartWeights[user.id]} кг
+                            {user.start_weight} кг
                           </Tag>
                         </Tooltip>
 
-                        {lastWeights[user.id] !== undefined && lastWeights[user.id] !== null ? (
+                        {user.current_weight ? (
                           <Tooltip title="Текущий вес">
-                            <Tag color="blue" style={{ 
-                              display: 'flex', 
+                            <Tag color="blue" style={{
+                              display: 'flex',
                               alignItems: 'center',
                               gap: '4px',
                               padding: '4px 8px',
@@ -170,7 +149,7 @@ const Users = () => {
                               whiteSpace: 'nowrap'
                             }}>
                               <DashboardOutlined />
-                              {lastWeights[user.id]} кг
+                              {user.current_weight} кг
                             </Tag>
                           </Tooltip>
                         ) : (
@@ -178,8 +157,8 @@ const Users = () => {
                         )}
 
                         <Tooltip title="День подписки">
-                          <Tag color="green" style={{ 
-                            display: 'flex', 
+                          <Tag color="green" style={{
+                            display: 'flex',
                             alignItems: 'center',
                             gap: '4px',
                             padding: '4px 8px',
@@ -191,9 +170,9 @@ const Users = () => {
                           </Tag>
                         </Tooltip>
                       </Space>
-                      
-                      <span style={{ 
-                        display: 'flex', 
+
+                      <span style={{
+                        display: 'flex',
                         alignItems: 'center',
                         color: '#666',
                         gap: '8px',
