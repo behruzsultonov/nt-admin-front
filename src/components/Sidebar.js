@@ -9,7 +9,8 @@ import {
   ShoppingOutlined,
   CoffeeOutlined,
   TeamOutlined,
-  LogoutOutlined
+  LogoutOutlined,
+  MessageOutlined
 } from '@ant-design/icons';
 
 const { Sider } = Layout;
@@ -30,6 +31,11 @@ const Sidebar = () => {
       key: '/users',
       icon: <TeamOutlined />,
       label: 'Пользователи',
+    },
+    {
+      key: '/chats',
+      icon: <MessageOutlined />,
+      label: 'Чаты',
     },
     {
       key: '/ingredients',

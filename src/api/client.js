@@ -1,106 +1,147 @@
 import axios from 'axios';
 
-const API_URL = 'http://localhost:3001';
-
-const api = axios.create({
-  baseURL: API_URL,
-  withCredentials: true
-});
-
-// Добавляем перехватчик для обработки ошибок
-api.interceptors.response.use(
-  response => response,
-  error => {
-    if (error.response) {
-      // Сервер ответил с ошибкой
-      console.error('Ошибка API:', error.response.data);
-    } else if (error.request) {
-      // Запрос был отправлен, но ответ не получен
-      console.error('Нет ответа от сервера');
-    } else {
-      // Ошибка при настройке запроса
-      console.error('Ошибка запроса:', error.message);
-    }
-    return Promise.reject(error);
-  }
-);
+ const PHP_API_URL = 'https://sadoapp.tj/nt-admin/'; // путь до вашего PHP backend
+// const PHP_API_URL = 'http://nt-admin/'; // путь до вашего PHP backend
+const api = {};
 
 // Аутентификация
-api.loginNutritionist = (email, password) => api.post('/api/nutritionists/login', { email, password });
+api.loginNutritionist = (email, password) => axios.post(`${PHP_API_URL}/index.php?action=login_nutritionist`, { email, password });
 
 // Ингредиенты
-api.getIngredients = () => api.get('/api/ingredients');
-api.getIngredient = (id) => api.get(`/api/ingredients/${id}`);
-api.createIngredient = (data) => api.post('/api/ingredients', data);
-api.updateIngredient = (id, data) => api.put(`/api/ingredients/${id}`, data);
-api.deleteIngredient = (id) => api.delete(`/api/ingredients/${id}`);
+api.getIngredients = () => axios.get(`${PHP_API_URL}/index.php`, { params: { action: 'get_ingredients' } });
+api.getIngredient = (id) => axios.get(`${PHP_API_URL}/index.php`, { params: { action: 'get_ingredient', id } });
+api.createIngredient = (data) => axios.post(`${PHP_API_URL}/index.php?action=create_ingredient`, data);
+api.updateIngredient = (id, data) => axios.put(`${PHP_API_URL}/index.php?action=update_ingredient`, { id, ...data });
+api.deleteIngredient = (id) => axios.delete(`${PHP_API_URL}/index.php`, { params: { action: 'delete_ingredient', id } });
 
 // Блюда
-api.getDishes = () => api.get('/api/dishes');
-api.getDish = (id) => api.get(`/api/dishes/${id}`);
-api.createDish = async (formData) => {
-  try {
-    const response = await axios.post(`${API_URL}/api/dishes`, formData, {
-      headers: {
-        'Content-Type': 'multipart/form-data',
-      },
+api.getDishes = () => axios.get(`${PHP_API_URL}/index.php`, { params: { action: 'get_dishes' } });
+api.getDish = (id) => axios.get(`${PHP_API_URL}/index.php`, { params: { action: 'get_dish', id } });
+api.createDish = (data) => axios.post(`${PHP_API_URL}/index.php?action=create_dish`, data);
+api.updateDish = (id, data) => {
+    // Ensure id is a valid number
+    const dishId = parseInt(id, 10);
+    if (isNaN(dishId)) {
+        return Promise.reject(new Error('Некорректный ID блюда'));
+    }
+
+    // If data is FormData, ensure it has the required fields
+    if (data instanceof FormData) {
+        // Add ID to FormData if not present
+        if (!data.has('id')) {
+            data.append('id', dishId);
+        }
+        
+        // Ensure meal_times is properly formatted
+        const mealTimes = data.get('meal_times');
+        if (mealTimes && typeof mealTimes === 'string') {
+            try {
+                JSON.parse(mealTimes);
+            } catch (e) {
+                data.set('meal_times', JSON.stringify([]));
+            }
+        }
+        
+        // Ensure ingredients is properly formatted
+        const ingredients = data.get('ingredients');
+        if (ingredients && typeof ingredients === 'string') {
+            try {
+                JSON.parse(ingredients);
+            } catch (e) {
+                data.set('ingredients', JSON.stringify([]));
+            }
+        }
+    }
+
+    return axios.post(
+        `${PHP_API_URL}/index.php?action=update_dish&id=${dishId}`,
+        data,
+        {
+            headers: data instanceof FormData ? 
+                { 'Content-Type': 'multipart/form-data' } : 
+                { 'Content-Type': 'application/json' }
+        }
+    ).catch(error => {
+        console.error('Update dish error:', error);
+        if (error.response) {
+            if (error.response.status === 404) {
+                throw new Error('Блюдо не найдено. Пожалуйста, обновите страницу и попробуйте снова.');
+            }
+            throw new Error(error.response.data.error || 'Ошибка при обновлении блюда');
+        }
+        throw error;
     });
-    return response;
-  } catch (error) {
-    throw error;
-  }
 };
-api.updateDish = async (id, formData) => {
-  try {
-    const response = await axios.put(`${API_URL}/api/dishes/${id}`, formData, {
-      headers: {
-        'Content-Type': 'multipart/form-data',
-      },
-    });
-    return response;
-  } catch (error) {
-    throw error;
-  }
-};
-api.deleteDish = (id) => api.delete(`/api/dishes/${id}`);
+api.deleteDish = (id) => axios.delete(`${PHP_API_URL}/index.php`, { params: { action: 'delete_dish', id } });
 
 // Пользователи
-api.getUsers = () => api.get('/api/users');
-api.getUser = (id) => api.get(`/api/users/${id}`);
-api.createUser = (data) => api.post('/api/users', data);
-api.updateUser = (id, data) => api.put(`/api/users/${id}`, data);
-api.deleteUser = (id) => api.delete(`/api/users/${id}`);
+api.getUsers = () => axios.get(`${PHP_API_URL}/index.php`, { params: { action: 'get_users' } });
+api.getUser = (id) => axios.get(`${PHP_API_URL}/index.php`, { params: { action: 'get_user', id } });
+api.createUser = (data) => axios.post(`${PHP_API_URL}/index.php?action=create_user`, data);
+api.updateUser = (id, data) => axios.put(`${PHP_API_URL}/index.php?action=update_user`, { id, ...data });
+api.deleteUser = (id) => axios.delete(`${PHP_API_URL}/index.php`, { params: { action: 'delete_user', id } });
 
 // Планы питания
-api.getMealPlans = (userId) => api.get(userId ? `/api/meal_plans?user_id=${userId}` : '/api/meal_plans');
-api.getMealPlan = (id) => api.get(`/api/meal_plans/${id}`);
-api.getMealPlanNutrition = (id) => api.get(`/api/meal_plans/${id}/nutrition`);
-api.createMealPlan = (data) => api.post('/api/meal_plans', data);
-api.copyMealPlan = (userId, sourcePlanId, targetPlanId) => api.post('/api/meal_plans/copy', { user_id: userId, source_plan_id: sourcePlanId, target_plan_id: targetPlanId });
-api.deleteMealPlan = (id) => api.delete(`/api/meal_plans/${id}`);
+api.getMealPlans = (userId) => axios.get(`${PHP_API_URL}/index.php`, { params: { action: 'get_meal_plans', user_id: userId } });
+api.getMealPlan = (id) => axios.get(`${PHP_API_URL}/index.php`, { params: { action: 'get_meal_plan', id } });
+api.getMealPlanNutrition = (id) => axios.get(`${PHP_API_URL}/index.php`, { params: { action: 'get_meal_plan_nutrition', id } });
+api.createMealPlan = (data) => axios.post(`${PHP_API_URL}/index.php?action=create_meal_plan`, data);
+api.copyMealPlan = (userId, sourcePlanId, targetPlanId) => axios.post(`${PHP_API_URL}/index.php?action=copy_meal_plan`, { user_id: userId, source_plan_id: sourcePlanId, target_plan_id: targetPlanId });
+api.deleteMealPlan = (id) => axios.delete(`${PHP_API_URL}/index.php`, { params: { action: 'delete_meal_plan', id } });
 
 // Блоки питания
-api.getMealBlocks = (planId) => api.get(`/api/meal_blocks?plan_id=${planId}`);
-api.getMealBlock = (id) => api.get(`/api/meal_blocks/${id}`);
-api.createMealBlock = (data) => api.post('/api/meal_blocks', data);
-api.updateMealBlock = (id, data) => api.put(`/api/meal_blocks/${id}`, data);
-api.deleteMealBlock = (id) => api.delete(`/api/meal_blocks/${id}`);
+api.getMealBlocks = (planId) => axios.get(`${PHP_API_URL}/index.php`, { params: { action: 'get_meal_blocks', plan_id: planId } });
+api.getMealBlock = (id) => axios.get(`${PHP_API_URL}/index.php`, { params: { action: 'get_meal_block', id } });
+api.createMealBlock = (data) => axios.post(`${PHP_API_URL}/index.php?action=create_meal_block`, data);
+api.updateMealBlock = (id, data) => axios.post(`${PHP_API_URL}/index.php?action=update_meal_block&id=${id}`, data);
+api.deleteMealBlock = (id) => axios.delete(`${PHP_API_URL}/index.php`, { params: { action: 'delete_meal_block', id } });
 
 // Блюда в блоке
-api.getMealItems = (blockId) => api.get(`/api/meal_items?block_id=${blockId}`);
-api.createMealItem = (data) => api.post('/api/meal_items', data);
-api.deleteMealItem = (id) => api.delete(`/api/meal_items/${id}`);
-api.updateMealItem = (id, data) => api.put(`/api/meal_items/${id}`, data);
+api.getMealItems = (blockId) => axios.get(`${PHP_API_URL}/index.php`, { params: { action: 'get_meal_items', block_id: blockId } });
+api.createMealItem = (data) => axios.post(`${PHP_API_URL}/index.php?action=create_meal_item`, data);
+api.deleteMealItem = (id) => axios.delete(`${PHP_API_URL}/index.php`, { params: { action: 'delete_meal_item', id } });
+api.updateMealItem = (id, data) => axios.post(`${PHP_API_URL}/index.php?action=update_meal_item&id=${id}`, data);
 
 // Нутрициологи
-api.getNutritionists = () => api.get('/api/nutritionists');
-api.getNutritionist = (id) => api.get(`/api/nutritionists/${id}`);
-api.createNutritionist = (data) => api.post('/api/nutritionists', data);
-api.updateNutritionist = (id, data) => api.put(`/api/nutritionists/${id}`, data);
-api.deleteNutritionist = (id) => api.delete(`/api/nutritionists/${id}`);
+api.getNutritionists = () => axios.get(`${PHP_API_URL}/index.php`, { params: { action: 'get_nutritionists' } });
+api.getNutritionist = (id) => axios.get(`${PHP_API_URL}/index.php`, { params: { action: 'get_nutritionist', id } });
+api.createNutritionist = (data) => axios.post(`${PHP_API_URL}/index.php?action=create_nutritionist`, data);
+api.updateNutritionist = (id, data) => axios.post(`${PHP_API_URL}/index.php?action=update_nutritionist&id=${id}`, data);
+api.deleteNutritionist = (id) => axios.delete(`${PHP_API_URL}/index.php`, { params: { action: 'delete_nutritionist', id } });
 
 // История веса
-api.getLastWeight = (userId, date) => api.get('/api/weight_history/last', { params: { user_id: userId, date } });
-api.getWeightHistory = (userId) => api.get('/api/weight_history', { params: { user_id: userId } });
+api.getLastWeight = (userId, date) => axios.get(`${PHP_API_URL}/index.php`, { params: { action: 'get_last_weight', user_id: userId, date } });
+api.getWeightHistory = (userId) => axios.get(`${PHP_API_URL}/index.php`, { params: { action: 'get_weight_history', user_id: userId } });
+
+// Чаты
+api.getChats = (nutritionistId = null, userId = null) => {
+    const params = { action: 'get_chats' };
+    if (nutritionistId) params.nutritionistId = nutritionistId;
+    if (userId) params.userId = userId;
+    return axios.get(`${PHP_API_URL}/index.php`, { params });
+};
+
+api.getChatMessages = (chatId) => axios.get(`${PHP_API_URL}/index.php`, { 
+    params: { action: 'get_chat_messages', chatId } 
+});
+
+api.sendMessage = (chatId, message, nutritionistId = null, userId = null, image_url = null) => {
+    const data = { chatId, message };
+    if (nutritionistId) data.nutritionistId = nutritionistId;
+    if (userId) data.userId = userId;
+    if (image_url) data.image_url = image_url;
+    return axios.post(`${PHP_API_URL}/index.php?action=send_message`, data);
+};
+
+api.createChat = (userId, nutritionistId, message) => axios.post(
+    `${PHP_API_URL}/index.php?action=create_chat`,
+    { userId, nutritionistId, message }
+);
+
+api.markMessagesAsRead = (chatId) => axios.put(
+    `${PHP_API_URL}/index.php?action=mark_messages_read`,
+    { chatId }
+);
 
 export default api;
+export { PHP_API_URL };

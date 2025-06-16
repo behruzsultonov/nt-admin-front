@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Card, List, Button, Input, Space, message, Typography, Tag, Tooltip } from 'antd';
-import { PlusOutlined, SearchOutlined, CalendarOutlined, UserOutlined, MailOutlined, DashboardOutlined, HistoryOutlined } from '@ant-design/icons';
+import { PlusOutlined, SearchOutlined, CalendarOutlined, UserOutlined, MailOutlined, DashboardOutlined, HistoryOutlined, PhoneOutlined } from '@ant-design/icons';
 import api from '../api/client';
 
 const { Title } = Typography;
@@ -69,7 +69,8 @@ const Users = () => {
 
   const filteredUsers = users.filter(user =>
     (user.name && user.name.toLowerCase().includes(searchText.toLowerCase())) ||
-    (user.email && user.email.toLowerCase().includes(searchText.toLowerCase()))
+    (user.email && user.email.toLowerCase().includes(searchText.toLowerCase())) ||
+    (user.phone && user.phone.toLowerCase().includes(searchText.toLowerCase()))
   );
 
   return (
@@ -200,8 +201,17 @@ const Users = () => {
                         overflow: 'hidden',
                         textOverflow: 'ellipsis'
                       }}>
-                        <MailOutlined />
-                        {user.email}
+                        {user.email ? (
+                          <>
+                            <MailOutlined />
+                            {user.email}
+                          </>
+                        ) : user.phone ? (
+                          <>
+                            <PhoneOutlined />
+                            {user.phone}
+                          </>
+                        ) : null}
                       </span>
                     </div>
                   </div>

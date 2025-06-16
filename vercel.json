@@ -1,0 +1,8 @@
+{
+  "rewrites": [
+    {
+      "source": "/nt-admin-front/:path*",
+      "destination": "/index.html"
+    }
+  ]
+} 

@@ -18,7 +18,7 @@ import {
   Tooltip
 } from 'antd';
 import { PlusOutlined, EditOutlined, DeleteOutlined, UploadOutlined } from '@ant-design/icons';
-import api from '../api/client';
+import api, { PHP_API_URL } from '../api/client';
 
 const { Title } = Typography;
 const { Option } = Select;
@@ -31,6 +31,11 @@ const mealTypes = [
   { value: 'Ужин', label: '🍽️ Ужин' },
   { value: 'Перекус', label: '🍎 Перекус' }
 ];
+
+const getFullImageUrl = (imageUrl) => {
+  if (!imageUrl) return null;
+  return imageUrl.startsWith('http') ? imageUrl : `${PHP_API_URL}${imageUrl}`;
+};
 
 const Dishes = () => {
   const [dishes, setDishes] = useState([]);
@@ -75,77 +80,64 @@ const Dishes = () => {
     try {
       const formData = new FormData();
       
-      // Если это редактирование, используем существующие значения как базовые
-      const baseValues = editingDish ? {
-        name: editingDish.name,
-        calories_per_100: editingDish.calories_per_100,
-        proteins_per_100: editingDish.proteins_per_100,
-        carbs_per_100: editingDish.carbs_per_100,
-        fats_per_100: editingDish.fats_per_100,
-        instruction: editingDish.instruction,
-        video_url: editingDish.video_url || '',
-        unit: editingDish.unit,
-        meal_times: editingDish.meal_times,
-        ingredients: editingDish.ingredients
-      } : {};
-
-      // Объединяем базовые значения с новыми
-      const finalValues = { ...baseValues, ...values };
-      
-      console.log('Final values before FormData:', finalValues);
-      
-      // Добавляем все поля формы в FormData
-      Object.keys(finalValues).forEach(key => {
+      // Добавляем все поля в FormData
+      Object.keys(values).forEach(key => {
         if (key === 'ingredients') {
-          formData.append(key, JSON.stringify(finalValues[key]));
+          // Убеждаемся, что ингредиенты в правильном формате
+          const ingredients = Array.isArray(values[key]) ? values[key] : [];
+          formData.append(key, JSON.stringify(ingredients));
         } else if (key === 'meal_times') {
-          formData.append(key, JSON.stringify(finalValues[key]));
+          // Убеждаемся, что типы приема пищи в правильном формате
+          const mealTimes = Array.isArray(values[key]) ? values[key] : [];
+          formData.append(key, JSON.stringify(mealTimes));
         } else if (key === 'image') {
-          console.log('Processing image field:', finalValues[key]);
-          if (Array.isArray(finalValues[key]) && finalValues[key].length > 0) {
-            const file = finalValues[key][0].originFileObj;
-            console.log('File to append:', file);
-            if (file instanceof File) {
-              formData.append('image', file);
-              console.log('File appended to FormData');
-            } else {
-              console.error('Not a File object:', file);
+          // Обработка изображения
+          if (Array.isArray(values[key]) && values[key].length > 0) {
+            const fileObj = values[key][0];
+            if (fileObj.originFileObj instanceof File) {
+              formData.append('image', fileObj.originFileObj);
             }
-          } else {
-            console.log('No file in image array');
           }
         } else {
-          formData.append(key, finalValues[key] || '');
+          // Все остальные поля
+          const value = values[key];
+          if (value !== undefined && value !== null) {
+            formData.append(key, value.toString());
+          }
         }
       });
 
-      // Проверяем содержимое FormData
-      console.log('FormData contents:');
-      for (let pair of formData.entries()) {
-        console.log('FormData entry:', pair[0], pair[1]);
+      // Проверяем наличие изображения для нового блюда
+      if (!editingDish && (!values.image || !values.image.length)) {
+        message.error('Пожалуйста, выберите изображение для блюда');
+        return;
       }
 
-      if (editingDish) {
-        await api.updateDish(editingDish.id, formData);
-        message.success('Блюдо обновлено');
-      } else {
-        await api.createDish(formData);
-        message.success('Блюдо добавлено');
+      try {
+        if (editingDish) {
+          await api.updateDish(editingDish.id, formData);
+          message.success('Блюдо обновлено');
+        } else {
+          await api.createDish(formData);
+          message.success('Блюдо добавлено');
+        }
+        setModalVisible(false);
+        form.resetFields();
+        setEditingDish(null);
+        fetchDishes();
+      } catch (error) {
+        console.error('Ошибка при сохранении блюда:', error);
+        if (error.response) {
+          message.error(`Ошибка: ${error.response.data.error || 'Неизвестная ошибка'}`);
+        } else if (error.request) {
+          message.error('Не удалось подключиться к серверу');
+        } else {
+          message.error(error.message || 'Ошибка при сохранении блюда');
+        }
       }
-      setModalVisible(false);
-      form.resetFields();
-      setEditingDish(null);
-      fetchDishes();
     } catch (error) {
-      console.error('Ошибка при сохранении блюда:', error);
-      if (error.response) {
-        const errorMessage = error.response.data.error || 'Неизвестная ошибка';
-        message.error(`Ошибка сервера: ${errorMessage}`);
-      } else if (error.request) {
-        message.error('Не удалось подключиться к серверу');
-      } else {
-        message.error('Ошибка при сохранении блюда');
-      }
+      console.error('Ошибка при подготовке данных:', error);
+      message.error('Ошибка при подготовке данных формы');
     }
   };
 
@@ -166,6 +158,35 @@ const Dishes = () => {
     }
   };
 
+  const handleEdit = (record) => {
+    console.log('Editing dish:', record);
+    setEditingDish(record);
+    form.setFieldsValue({
+      ...record,
+      unit: record.unit || 'г',
+      meal_times: record.meal_times || [],
+      time: record.time,
+      note: record.note,
+      ingredients: record.ingredients.map(ing => {
+        const ingredient_id = ing.ingredient_id || ing.id;
+        const ingredientObj = ingredients.find(i => i.id === ingredient_id);
+        return {
+          ingredient_id,
+          amount: ing.amount,
+          unit: ing.unit || 'г',
+          name: ing.name || (ingredientObj ? ingredientObj.name : '')
+        };
+      }),
+      image: record.image_url ? [{
+        uid: '-1',
+        name: record.image_url.split('/').pop(),
+        status: 'done',
+        url: getFullImageUrl(record.image_url)
+      }] : []
+    });
+    setModalVisible(true);
+  };
+
   const columns = [
     {
       title: 'Действия',
@@ -175,32 +196,7 @@ const Dishes = () => {
           <Button
             type="link"
             icon={<EditOutlined />}
-            onClick={() => {
-              console.log('Editing dish:', record);
-              setEditingDish(record);
-              form.setFieldsValue({
-                ...record,
-                unit: record.unit || 'г',
-                meal_times: record.meal_times || [],
-                ingredients: record.ingredients.map(ing => {
-                  const ingredient_id = ing.ingredient_id || ing.id;
-                  const ingredientObj = ingredients.find(i => i.id === ingredient_id);
-                  return {
-                    ingredient_id,
-                    amount: ing.amount,
-                    unit: ing.unit || 'г',
-                    name: ing.name || (ingredientObj ? ingredientObj.name : '')
-                  };
-                }),
-                image: record.image_url ? [{
-                  uid: '-1',
-                  name: record.image_url.split('/').pop(),
-                  status: 'done',
-                  url: record.image_url.startsWith('http') ? record.image_url : `http://localhost:3001${record.image_url}`
-                }] : []
-              });
-              setModalVisible(true);
-            }}
+            onClick={() => handleEdit(record)}
           />
           <Popconfirm
             title="Удалить блюдо?"
@@ -225,7 +221,7 @@ const Dishes = () => {
       render: (image_url) => (
         image_url ? (
           <img 
-            src={image_url.startsWith('http') ? image_url : `http://localhost:3001${image_url}`} 
+            src={getFullImageUrl(image_url)} 
             alt="Блюдо" 
             style={{ width: 100, height: 100, objectFit: 'cover' }} 
           />
@@ -400,6 +396,21 @@ const Dishes = () => {
           </Form.Item>
 
           <Form.Item
+            name="time"
+            label="Время приготовления (мин.) *"
+            rules={[{ required: true, message: 'Введите время приготовления' }]}
+          >
+            <InputNumber min={1} style={{ width: '100%' }} />
+          </Form.Item>
+
+          <Form.Item
+            name="note"
+            label="Примечание"
+          >
+            <TextArea rows={2} />
+          </Form.Item>
+
+          <Form.Item
             name="video_url"
             label="Ссылка на видео"
           >
@@ -408,31 +419,35 @@ const Dishes = () => {
 
           <Form.Item
             name="image"
-            label="Изображение блюда *"
-            rules={[{ required: true, message: 'Загрузите изображение блюда' }]}
+            label="Изображение блюда"
+            rules={[
+              { 
+                required: !editingDish, 
+                message: 'Загрузите изображение блюда' 
+              }
+            ]}
             valuePropName="fileList"
             getValueFromEvent={(e) => {
-              console.log('Upload event:', e);
               if (Array.isArray(e)) {
                 return e;
               }
-              return e?.fileList;
+              return e?.fileList || [];
             }}
           >
             <Upload
               name="image"
               listType="picture"
               maxCount={1}
-              beforeUpload={(file) => {
-                console.log('Before upload file:', file);
-                return false;
-              }}
+              beforeUpload={() => false}
               accept="image/*"
-              onChange={(info) => {
-                console.log('Upload onChange:', info);
+              showUploadList={{
+                showPreviewIcon: true,
+                showRemoveIcon: true,
               }}
             >
-              <Button icon={<UploadOutlined />}>Выбрать изображение</Button>
+              <Button icon={<UploadOutlined />}>
+                {editingDish ? 'Изменить изображение' : 'Выбрать изображение'}
+              </Button>
             </Upload>
           </Form.Item>
 

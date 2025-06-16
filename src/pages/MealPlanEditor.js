@@ -97,6 +97,8 @@ const MealPlanEditor = () => {
   const [editBlockMeals, setEditBlockMeals] = useState([]);
   const [editBlockDishes, setEditBlockDishes] = useState([]);
   const [completedBlocks, setCompletedBlocks] = useState({});
+  const [addBlockLoading, setAddBlockLoading] = useState(false);
+  const [editBlockLoading, setEditBlockLoading] = useState(false);
 
   // Добавим стили для анимации
   const buttonWithTextStyle = {
@@ -134,36 +136,64 @@ const MealPlanEditor = () => {
   const fetchPlanAndBlocks = async () => {
     try {
       setLoading(true);
-      const [planResponse, blocksResponse] = await Promise.all([
-        api.getMealPlan(planId),
-        api.getMealBlocks(planId)
-      ]);
+      
+      // Проверяем наличие planId
+      if (!planId) {
+        message.error('ID плана не указан');
+        return;
+      }
+
+      // Загружаем план
+      const planResponse = await api.getMealPlan(planId);
+      if (!planResponse.data) {
+        message.error('План не найден');
+        return;
+      }
       setPlan(planResponse.data);
       
+      // Загружаем блоки
+      const blocksResponse = await api.getMealBlocks(planId);
+      
       // Получаем последний вес до даты плана
-      if (planResponse.data) {
+      try {
         const lastWeightResponse = await api.getLastWeight(
           planResponse.data.user_id,
           planResponse.data.date
         );
-        setLastWeight(lastWeightResponse.data);
+        if (lastWeightResponse.data) {
+          setLastWeight(lastWeightResponse.data);
+        }
+      } catch (weightError) {
+        console.error('Ошибка при загрузке веса:', weightError);
+        // Не прерываем выполнение, так как вес не критичен
       }
       
-      console.log('blocksResponse', blocksResponse.data);
-      
+      // Загружаем блюда для каждого блока
       let blocksWithMeals = [];
       if (Array.isArray(blocksResponse.data)) {
         blocksWithMeals = await Promise.all(
           blocksResponse.data.map(async (block) => {
             if (!block.id) return block;
-            const mealsResponse = await api.getMealItems(block.id);
-            return { ...block, meals: mealsResponse.data };
+            try {
+              const mealsResponse = await api.getMealItems(block.id);
+              return { ...block, meals: mealsResponse.data || [] };
+            } catch (mealError) {
+              console.error(`Ошибка при загрузке блюд для блока ${block.id}:`, mealError);
+              return { ...block, meals: [] };
+            }
           })
         );
       }
       setBlocks(blocksWithMeals);
     } catch (error) {
-      message.error('Ошибка при загрузке данных');
+      console.error('Ошибка при загрузке данных:', error);
+      if (error.response) {
+        message.error(`Ошибка сервера: ${error.response.data?.error || 'Неизвестная ошибка'}`);
+      } else if (error.request) {
+        message.error('Не удалось подключиться к серверу');
+      } else {
+        message.error('Ошибка при загрузке данных');
+      }
     } finally {
       setLoading(false);
     }
@@ -172,55 +202,92 @@ const MealPlanEditor = () => {
   const fetchDishes = async () => {
     try {
       const response = await api.getDishes();
-      console.log('Загруженные блюда:', response.data);
-      if (response.data) setDishes(response.data);
+      if (response.data) {
+        setDishes(response.data);
+      } else {
+        message.warning('Список блюд пуст');
+      }
     } catch (error) {
       console.error('Ошибка при загрузке блюд:', error);
-      message.error('Ошибка при загрузке блюд');
+      if (error.response) {
+        message.error(`Ошибка загрузки блюд: ${error.response.data?.error || 'Неизвестная ошибка'}`);
+      } else if (error.request) {
+        message.error('Не удалось подключиться к серверу');
+      } else {
+        message.error('Ошибка при загрузке блюд');
+      }
     }
   };
 
   const fetchPlanNutrition = async (planId) => {
+    if (!planId) return null;
+    
     try {
       const response = await api.getMealPlanNutrition(planId);
-      return response.data;
+      return response.data || null;
     } catch (error) {
-      console.error('Ошибка при получении информации о питании:', error);
+      console.error(`Ошибка при получении информации о питании для плана ${planId}:`, error);
       return null;
     }
   };
 
   const fetchPreviousPlans = async () => {
+    if (!id) {
+      console.error('ID пользователя не указан');
+      return;
+    }
+
     try {
       const response = await api.getMealPlans(id);
-      if (response.data) {
-        // Фильтруем планы, исключая текущий
-        const filteredPlans = response.data.filter(p => p.id !== parseInt(planId));
-        
-        // Получаем информацию о питании для каждого плана
-        const plansWithNutritionData = await Promise.all(
-          filteredPlans.map(async (plan) => {
+      if (!response.data) {
+        setPreviousPlans([]);
+        setPlansWithNutrition([]);
+        return;
+      }
+
+      // Фильтруем планы, исключая текущий
+      const filteredPlans = response.data.filter(p => p.id !== parseInt(planId));
+      
+      // Получаем информацию о питании для каждого плана
+      const plansWithNutritionData = await Promise.all(
+        filteredPlans.map(async (plan) => {
+          try {
             const nutritionData = await fetchPlanNutrition(plan.id);
             return {
               ...plan,
               nutrition: nutritionData
             };
-          })
-        );
-        
-        setPlansWithNutrition(plansWithNutritionData);
-        setPreviousPlans(filteredPlans);
-      }
+          } catch (error) {
+            console.error(`Ошибка при загрузке питания для плана ${plan.id}:`, error);
+            return {
+              ...plan,
+              nutrition: null
+            };
+          }
+        })
+      );
+      
+      setPlansWithNutrition(plansWithNutritionData);
+      setPreviousPlans(filteredPlans);
     } catch (error) {
       console.error('Ошибка при загрузке предыдущих планов:', error);
-      message.error('Ошибка при загрузке предыдущих планов');
+      if (error.response) {
+        message.error(`Ошибка загрузки планов: ${error.response.data?.error || 'Неизвестная ошибка'}`);
+      } else if (error.request) {
+        message.error('Не удалось подключиться к серверу');
+      } else {
+        message.error('Ошибка при загрузке предыдущих планов');
+      }
     }
   };
 
+  // Обновляем useEffect для корректной загрузки данных
   useEffect(() => {
-    fetchPlanAndBlocks();
-    fetchPreviousPlans();
-  }, [planId]);
+    if (planId) {
+      fetchPlanAndBlocks();
+      fetchPreviousPlans();
+    }
+  }, [planId, id]);
 
   useEffect(() => {
     console.log('plansWithNutrition:', plansWithNutrition);
@@ -250,10 +317,10 @@ const MealPlanEditor = () => {
   }, [dishes, editBlockModalVisible, editingBlock]);
 
   const handleAddBlock = async (values) => {
+    setAddBlockLoading(true);
     try {
       let dishesArr = [];
       if (values.type === 'water') {
-        // Для воды
         let response = await api.createMealBlock({
           plan_id: parseInt(planId),
           type: values.type,
@@ -261,14 +328,12 @@ const MealPlanEditor = () => {
           time_end: values.endTime.format('HH:mm'),
           note: values.note
         });
-
         if (response.data && response.data.id) {
           await api.createMealItem({
             block_id: response.data.id,
             amount: values.water_amount,
             note: values.water_note
           });
-          
           setBlocks([...blocks, { ...response.data, meals: [] }]);
           setBlockModalVisible(false);
           blockForm.resetFields();
@@ -278,60 +343,37 @@ const MealPlanEditor = () => {
           fetchPlanAndBlocks();
         }
       } else {
-        // Для обычных блюд
-        if (Array.isArray(values.dishes)) {
-          dishesArr = values.dishes.map(dishId => ({
-            dish_id: dishId,
-            amount: values[`amount_${dishId}`],
-            note: values[`note_${dishId}`]
-          }));
-        }
-
+        // Для обычных блоков с блюдами
         let response = await api.createMealBlock({
           plan_id: parseInt(planId),
           type: values.type,
           time_start: values.startTime.format('HH:mm'),
           time_end: values.endTime.format('HH:mm'),
-          note: values.note,
-          dishes: dishesArr
+          dishes: (values.dishes || []).map(dishId => ({
+            dish_id: dishId,
+            amount: values[`amount_${dishId}`],
+            note: values[`note_${dishId}`]
+          })),
+          note: values.note
         });
-
         if (response.data && response.data.id) {
           setBlocks([...blocks, { ...response.data, meals: [] }]);
           setBlockModalVisible(false);
           blockForm.resetFields();
           setBlockTypeInModal(null);
           setSelectedDishes([]);
-          message.success('Блок и блюда добавлены');
+          message.success('Блок добавлен');
           fetchPlanAndBlocks();
-        } else {
-          message.error('Ошибка при добавлении блока');
         }
       }
     } catch (error) {
-      console.error('Ошибка при добавлении блока:', error);
-      if (error.code === 'ETIMEDOUT') {
-        message.error('Ошибка соединения с сервером. Пожалуйста, попробуйте позже.');
-      } else if (error.response) {
-        if (error.response.status === 409) {
-          const details = error.response.data.details || {};
-          const { existing_block } = details;
-          if (existing_block && existing_block.type && existing_block.time_start && existing_block.time_end) {
-            const blockType = blockTypes.find(type => type.value === existing_block.type);
-            message.error(
-              `Временной интервал пересекается с существующим блоком: ${blockType?.label} (${existing_block.time_start} - ${existing_block.time_end})`
-            );
-          } else {
-            message.error('Временной интервал пересекается с другим блоком.');
-          }
-        } else {
-          message.error(`Ошибка сервера: ${error.response.status}`);
-        }
-      } else if (error.request) {
-        message.error('Не удалось подключиться к серверу');
+      if (error.response && error.response.status === 409) {
+        message.error('Блок с таким временем уже существует');
       } else {
         message.error('Ошибка при добавлении блока');
       }
+    } finally {
+      setAddBlockLoading(false);
     }
   };
 
@@ -413,6 +455,7 @@ const MealPlanEditor = () => {
   };
 
   const handleEditBlock = async (values) => {
+    setEditBlockLoading(true);
     try {
       // Формируем массив блюд для передачи (если потребуется)
       let dishesArr = [];
@@ -508,6 +551,8 @@ const MealPlanEditor = () => {
       } else {
         message.error('Ошибка при обновлении блока');
       }
+    } finally {
+      setEditBlockLoading(false);
     }
   };
 
@@ -1154,6 +1199,7 @@ const MealPlanEditor = () => {
         }}
         okText="Добавить"
         cancelText="Отмена"
+        confirmLoading={addBlockLoading}
       >
         <Form form={blockForm} onFinish={handleAddBlock} layout="vertical">
           <Form.Item
@@ -1352,6 +1398,7 @@ const MealPlanEditor = () => {
         }}
         okText="Сохранить"
         cancelText="Отмена"
+        confirmLoading={editBlockLoading}
       >
         <Form form={editBlockForm} onFinish={handleEditBlock} layout="vertical">
           <Form.Item
