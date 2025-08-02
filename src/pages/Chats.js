@@ -4,6 +4,11 @@ import { SendOutlined, UserOutlined, UploadOutlined, DeleteOutlined } from '@ant
 import api, { PHP_API_URL } from '../api/client';
 import { useAuth } from '../contexts/AuthContext';
 import dayjs from 'dayjs';
+import utc from 'dayjs/plugin/utc';
+import timezone from 'dayjs/plugin/timezone';
+
+dayjs.extend(utc);
+dayjs.extend(timezone);
 
 const { Title } = Typography;
 const { TextArea } = Input;
@@ -57,11 +62,11 @@ const Chats = () => {
       setMessagesLoading(true);
       const response = await api.getChatMessages(chatId);
       const newMessages = response.data || [];
-      
+
       // Скроллим только если это первая загрузка или количество сообщений изменилось
       const shouldScroll = isFirstLoad.current || newMessages.length > messages.length;
       setMessages(newMessages);
-      
+
       if (shouldScroll) {
         scrollToBottom();
       }
@@ -111,11 +116,11 @@ const Chats = () => {
 
   const handleImageChange = (info) => {
     const { status, originFileObj } = info.file;
-    
+
     if (status === 'uploading') {
       return;
     }
-    
+
     if (status === 'done' || status === undefined) {
       setImageFile(originFileObj);
     } else if (status === 'error') {
@@ -131,7 +136,7 @@ const Chats = () => {
   // Отправка нового сообщения
   const sendMessage = async () => {
     if (!newMessage.trim() && !uploadedImageUrl) return;
-    
+
     try {
       await api.sendMessage(
         selectedChat.id,
@@ -140,11 +145,11 @@ const Chats = () => {
         null,
         uploadedImageUrl
       );
-      
+
       setNewMessage('');
       setImageFile(null);
       setUploadedImageUrl(null);
-      
+
       // Обновляем сообщения после отправки и скроллим вниз
       await fetchMessages(selectedChat.id);
       scrollToBottom();
@@ -230,13 +235,13 @@ const Chats = () => {
                   </div>
                 </div>
                 {/* Сообщения */}
-                <div 
+                <div
                   ref={messagesContainerRef}
-                  style={{ 
-                    flex: 1, 
-                    overflowY: 'auto', 
-                    padding: '16px 0', 
-                    position: 'relative', 
+                  style={{
+                    flex: 1,
+                    overflowY: 'auto',
+                    padding: '16px 0',
+                    position: 'relative',
                     background: '#f9fbff',
                     display: 'flex',
                     flexDirection: 'column-reverse'
@@ -266,10 +271,10 @@ const Chats = () => {
                                 paddingRight: isAdmin ? 0 : 60,
                               }}
                             >
-                              <div style={{ 
-                                position: 'relative', 
+                              <div style={{
+                                position: 'relative',
                                 display: 'inline-block',
-                                maxWidth: 'fit-content' 
+                                maxWidth: 'fit-content'
                               }}>
                                 <img
                                   src={imgSrc}
@@ -306,7 +311,7 @@ const Chats = () => {
                                     userSelect: 'none',
                                   }}
                                 >
-                                  {dayjs(message.created_at).format('HH:mm')}
+                                  {dayjs.utc(message.created_at).tz('Asia/Dushanbe').format('HH:mm')}
                                 </div>
                               </div>
                             </div>
@@ -381,7 +386,7 @@ const Chats = () => {
                                   padding: 0,
                                   lineHeight: 1,
                                 }}>
-                                  {dayjs(message.created_at).format('HH:mm')}
+                                  {dayjs.utc(message.created_at).tz('Asia/Dushanbe').format('HH:mm')}
                                 </div>
                               </div>
                             </div>
@@ -437,7 +442,7 @@ const Chats = () => {
                                 padding: 0,
                                 lineHeight: 1,
                               }}>
-                                {dayjs(message.created_at).format('HH:mm')}
+                                {dayjs.utc(message.created_at).tz('Asia/Dushanbe').format('HH:mm')}
                               </div>
                             </div>
                           </div>
@@ -499,9 +504,9 @@ const Chats = () => {
                         />
                       </Upload>
                     </Form.Item>
-                    
+
                     {imageFile && (
-                      <div style={{ 
+                      <div style={{
                         position: 'relative',
                         width: 38,
                         height: 38,
@@ -518,7 +523,7 @@ const Chats = () => {
                           }}
                           alt=""
                         />
-                        <Button 
+                        <Button
                           type="text"
                           icon={<DeleteOutlined />}
                           onClick={(e) => {
@@ -559,7 +564,7 @@ const Chats = () => {
                         style={{ borderRadius: 8 }}
                       />
                     </div>
-                    
+
                     <Button
                       type="primary"
                       icon={<SendOutlined />}
@@ -599,7 +604,7 @@ const Chats = () => {
           </div>
         </div>
       </Card>
-      
+
       {/* Модальное окно для просмотра изображения */}
       <Modal
         visible={!!modalImage}
